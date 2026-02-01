@@ -31,6 +31,7 @@ class Account:
     age_days: int
     proxy: str
     ios_profile: str
+    profile_path: str
     notes: str = ""
     created_at: Optional[str] = None
 
@@ -52,6 +53,10 @@ def get_connection() -> sqlite3.Connection:
     return connection
 
 
+def build_profile_path(account_id: int) -> str:
+    return str(PROFILE_DIR / f"account_{account_id}")
+
+
 def init_db() -> None:
     with get_connection() as connection:
         connection.execute(
@@ -63,6 +68,7 @@ def init_db() -> None:
                 age_days INTEGER NOT NULL,
                 proxy TEXT NOT NULL,
                 ios_profile TEXT NOT NULL,
+                profile_path TEXT,
                 notes TEXT,
                 created_at TEXT
             );
@@ -99,6 +105,36 @@ def init_db() -> None:
         if "created_at" not in columns:
             connection.execute("ALTER TABLE accounts ADD COLUMN created_at TEXT")
             connection.commit()
+        if "profile_path" not in columns:
+            connection.execute("ALTER TABLE accounts ADD COLUMN profile_path TEXT")
+            connection.commit()
+
+        rows = connection.execute(
+            "SELECT id, age_days, created_at, profile_path FROM accounts"
+        ).fetchall()
+        now = datetime.datetime.now()
+        for row in rows:
+            updates = {}
+            if not row["created_at"]:
+                created_at = now - datetime.timedelta(days=int(row["age_days"] or 0))
+                updates["created_at"] = created_at.isoformat(timespec="minutes")
+            if not row["profile_path"]:
+                updates["profile_path"] = build_profile_path(int(row["id"]))
+            if updates:
+                connection.execute(
+                    """
+                    UPDATE accounts
+                    SET created_at = COALESCE(?, created_at),
+                        profile_path = COALESCE(?, profile_path)
+                    WHERE id = ?
+                    """,
+                    (
+                        updates.get("created_at"),
+                        updates.get("profile_path"),
+                        row["id"],
+                    ),
+                )
+        connection.commit()
 
         seed_demo_data = os.getenv("SEED_DEMO_DATA", "").strip().lower() in {
             "1",
@@ -115,8 +151,8 @@ def init_db() -> None:
                 connection.executemany(
                     """
                     INSERT INTO accounts
-                        (name, email, age_days, proxy, ios_profile, notes, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?);
+                        (name, email, age_days, proxy, ios_profile, profile_path, notes, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                     """,
                     [
                         (
@@ -125,8 +161,9 @@ def init_db() -> None:
                             320,
                             "http://user:pass@proxy-a:8080",
                             "iPhone 13",
+                            build_profile_path(1),
                             "Hauptaccount",
-                            (now - datetime.timedelta(days=320)).strftime("%Y-%m-%d %H:%M"),
+                            (now - datetime.timedelta(days=320)).isoformat(timespec="minutes"),
                         ),
                         (
                             "Account B",
@@ -134,8 +171,9 @@ def init_db() -> None:
                             180,
                             "http://user:pass@proxy-b:8080",
                             "iPhone 12",
+                            build_profile_path(2),
                             "Ersatzaccount",
-                            (now - datetime.timedelta(days=180)).strftime("%Y-%m-%d %H:%M"),
+                            (now - datetime.timedelta(days=180)).isoformat(timespec="minutes"),
                         ),
                     ],
                 )
@@ -177,10 +215,19 @@ def row_to_account(row: sqlite3.Row) -> Account:
     created_at = data.get("created_at")
     if created_at:
         try:
-            created = datetime.datetime.strptime(created_at, "%Y-%m-%d %H:%M")
+            created = datetime.datetime.fromisoformat(created_at)
             data["age_days"] = max((datetime.datetime.now() - created).days, 0)
         except ValueError:
-            pass
+            try:
+                created = datetime.datetime.strptime(created_at, "%Y-%m-%d %H:%M")
+                data["age_days"] = max((datetime.datetime.now() - created).days, 0)
+            except ValueError:
+                data["age_days"] = int(data.get("age_days") or 0)
+    else:
+        data["age_days"] = int(data.get("age_days") or 0)
+
+    if not data.get("profile_path"):
+        data["profile_path"] = build_profile_path(int(data["id"]))
     return Account(**data)
 
 
@@ -235,7 +282,16 @@ def login_with_playwright(account: Account) -> None:
     """
     record_login_job(account.id, "running")
 
-    profile_path = PROFILE_DIR / f"account_{account.id}"
+    if not account.profile_path:
+        account.profile_path = build_profile_path(account.id)
+        with get_connection() as connection:
+            connection.execute(
+                "UPDATE accounts SET profile_path = ? WHERE id = ?",
+                (account.profile_path, account.id),
+            )
+            connection.commit()
+
+    profile_path = Path(account.profile_path or build_profile_path(account.id))
     profile_path.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -327,18 +383,23 @@ def login_account():
     if not proxy or not ios_profile:
         return jsonify({"error": "Proxy und iOS-Profil sind erforderlich."}), 400
 
-    created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    created_at = datetime.datetime.now().isoformat(timespec="minutes")
     account_name = label or "Neuer Account"
 
     with get_connection() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO accounts (name, email, age_days, proxy, ios_profile, notes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO accounts (name, email, age_days, proxy, ios_profile, profile_path, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (account_name, "", 0, proxy, ios_profile, label, created_at),
+            (account_name, "", 0, proxy, ios_profile, "", label, created_at),
         )
         account_id = cursor.lastrowid
+        profile_path = build_profile_path(account_id)
+        connection.execute(
+            "UPDATE accounts SET profile_path = ? WHERE id = ?",
+            (profile_path, account_id),
+        )
         connection.commit()
 
         row = connection.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
