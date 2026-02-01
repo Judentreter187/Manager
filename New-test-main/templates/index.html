@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kleinanzeigen Account Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <header>
+      <h1>Kleinanzeigen Account Manager</h1>
+      <p>
+        Lokales Assistenz-Tool mit iOS-Emulation, festen Proxies und Human-in-the-loop.
+      </p>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab-button active" data-tab="accounts">Accounts</button>
+      <button class="tab-button" data-tab="messages">Nachrichten</button>
+      <button class="tab-button" data-tab="listings">Inserieren</button>
+      <button class="tab-button" data-tab="system">System</button>
+    </nav>
+
+    <main>
+      <section id="accounts" class="tab active">
+        <h2>Account Management</h2>
+
+        <div class="card login-card">
+          <div>
+            <h3>iOS Login starten</h3>
+            <p>
+              Öffnet eine echte Safari-iOS-Session mit festem Proxy und persistentem Profil.
+              Ziel:
+              <a href="{{ login_url }}" target="_blank" rel="noreferrer">Kleinanzeigen In-App Login</a>.
+            </p>
+          </div>
+          <div class="login-actions">
+            <select id="login-account">
+              {% for account in accounts %}
+              <option value="{{ account.id }}">{{ account.name }} ({{ account.ios_profile }})</option>
+              {% endfor %}
+            </select>
+            <button id="login-button">Login starten</button>
+          </div>
+        </div>
+
+        <div class="card-grid">
+          {% for account in accounts %}
+          <article class="card">
+            <h3>{{ account.name }}</h3>
+            <dl>
+              <dt>E-Mail</dt>
+              <dd>{{ account.email }}</dd>
+              <dt>Account-Alter</dt>
+              <dd>{{ account.age_days }} Tage</dd>
+              <dt>Proxy</dt>
+              <dd>{{ account.proxy }}</dd>
+              <dt>iOS-Profil</dt>
+              <dd>{{ account.ios_profile }}</dd>
+              <dt>Notizen</dt>
+              <dd>{{ account.notes }}</dd>
+            </dl>
+            <div class="actions">
+              <button class="secondary">Login starten (Playwright)</button>
+              <button>Proxy testen</button>
+              <button class="secondary">Profil öffnen</button>
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section id="messages" class="tab">
+        <h2>Nachrichten</h2>
+        <p class="muted">
+          Nachrichten werden alle 60 Sekunden aktualisiert (nur Anzeige, kein automatischer Versand).
+        </p>
+        <div class="split">
+          <div class="chat-list" id="chat-list">
+            {% for message in messages %}
+            <div class="chat-item" data-account="{{ message.account_id }}">
+              <strong>{{ message.listing_title }}</strong>
+              <span>Account #{{ message.account_id }}</span>
+              <p>{{ message.text }}</p>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="chat-panel">
+            <div class="chat-header">
+              <h3>Konversation</h3>
+              <span class="badge">iOS-Chat</span>
+            </div>
+            <div class="chat-window" id="chat-window">
+              {% for message in messages %}
+              <div class="bubble {{ 'out' if message.sender == 'Firma' else 'in' }}">
+                <p>{{ message.text }}</p>
+                <span>{{ message.timestamp }} · {{ message.sender }}</span>
+              </div>
+              {% endfor %}
+            </div>
+            <form id="message-form" class="chat-input">
+              <select name="account_id" aria-label="Account">
+                {% for account in accounts %}
+                <option value="{{ account.id }}">{{ account.name }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" name="listing_title" placeholder="Inserat-Titel" required />
+              <input type="text" name="text" placeholder="Nachricht schreiben…" required />
+              <button type="submit">Senden</button>
+            </form>
+            <p class="helper">
+              Versand erfolgt über die iOS-Emulation des gewählten Accounts (Human-in-the-loop).
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="listings" class="tab">
+        <h2>Inserieren</h2>
+        <form class="card form-grid">
+          <label>
+            Account
+            <select>
+              {% for account in accounts %}
+              <option value="{{ account.id }}">{{ account.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label>
+            Titel
+            <input type="text" placeholder="z. B. iPhone 13 Pro 256GB" />
+          </label>
+          <label>
+            Preis
+            <input type="number" placeholder="€" />
+          </label>
+          <label>
+            Beschreibung
+            <textarea rows="4" placeholder="Beschreibung des Artikels"></textarea>
+          </label>
+          <label>
+            Kategorie
+            <input type="text" placeholder="Kategorie wählen" />
+          </label>
+          <label>
+            Versand / Abholung
+            <select>
+              <option>Nur Abholung</option>
+              <option>Versand möglich</option>
+            </select>
+          </label>
+          <label>
+            Postleitzahl / Ort
+            <input type="text" placeholder="z. B. 10115 Berlin" />
+          </label>
+          <label>
+            Bilder
+            <input type="file" multiple />
+          </label>
+          <div class="actions">
+            <button class="secondary" type="button">Automatisch ausfüllen</button>
+            <button type="button">Manuell veröffentlichen</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="system" class="tab">
+        <h2>System & Datenschutz</h2>
+        <ul>
+          <li>Datensparsamkeit: nur notwendige Account-Metadaten lokal speichern.</li>
+          <li>Pro Account ein persistentes Browser-Profil mit festen Proxy-Einstellungen.</li>
+          <li>Alle kritischen Aktionen bleiben manuell (Login, Nachrichten, Inserieren).</li>
+          <li>Playwright wird nur als Hintergrundprozess genutzt.</li>
+          <li>Login öffnet die Kleinanzeigen In-App URL (iOS Safari Profil).</li>
+        </ul>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
