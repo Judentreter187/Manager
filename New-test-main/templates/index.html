@@ -33,18 +33,10 @@
               Ziel:
               <a href="{{ login_url }}" target="_blank" rel="noreferrer">Kleinanzeigen In-App Login</a>.
             </p>
+            <p class="muted" id="login-status">Bereit für den Login.</p>
           </div>
           <div class="login-actions">
-            <select id="login-account">
-              {% if accounts %}
-              {% for account in accounts %}
-              <option value="{{ account.id }}">{{ account.name }} ({{ account.ios_profile }})</option>
-              {% endfor %}
-              {% else %}
-              <option value="">Keine Accounts vorhanden</option>
-              {% endif %}
-            </select>
-            <button id="login-button" {% if not accounts %}disabled{% endif %}>Login starten</button>
+            <button id="login-button" class="primary">Login starten</button>
           </div>
         </div>
 
@@ -66,7 +58,6 @@
                 <dd>{{ account.notes }}</dd>
               </dl>
               <div class="actions">
-                <button class="secondary">Login starten (Playwright)</button>
                 <button>Proxy testen</button>
                 <button class="secondary">Profil öffnen</button>
               </div>
@@ -199,6 +190,32 @@
         </ul>
       </section>
     </main>
+
+    <div class="modal hidden" id="login-modal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+        <h3 id="login-modal-title">Login starten</h3>
+        <p class="muted">Bitte Proxy und iOS-Profil angeben, bevor die iOS-Session geöffnet wird.</p>
+        <form id="login-modal-form">
+          <label>
+            Proxy
+            <input type="text" name="proxy" placeholder="http://user:pass@proxy:8080" required />
+          </label>
+          <label>
+            iOS-Geräteprofil
+            <input type="text" name="ios_profile" placeholder="z. B. iPhone 13" required />
+          </label>
+          <label>
+            Label (optional)
+            <input type="text" name="label" placeholder="z. B. Sommer-Account" />
+          </label>
+          <div class="actions modal-actions">
+            <button type="button" class="secondary" data-close-modal>Abbrechen</button>
+            <button type="submit">Login starten</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
