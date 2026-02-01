@@ -1,4 +1,4 @@
-const loginButton = document.getElementById("login-button");
+const loginButton = document.getElementById("open-login-modal");
 const loginModal = document.getElementById("login-modal");
 const loginForm = document.getElementById("login-modal-form");
 const loginStatus = document.getElementById("login-status");
@@ -84,9 +84,9 @@ if (loginForm) {
     event.preventDefault();
     const formData = new FormData(loginForm);
     const payload = {
+      email: formData.get("email"),
+      password: formData.get("password"),
       proxy: formData.get("proxy"),
-      ios_profile: formData.get("ios_profile"),
-      label: formData.get("label"),
     };
 
     updateLoginButtonState(true);

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import os
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +33,7 @@ class Account:
     profile_path: str
     notes: str = ""
     created_at: Optional[str] = None
+    password: Optional[str] = None
 
 
 @dataclass
@@ -70,7 +70,8 @@ def init_db() -> None:
                 ios_profile TEXT NOT NULL,
                 profile_path TEXT,
                 notes TEXT,
-                created_at TEXT
+                created_at TEXT,
+                password TEXT
             );
             """
         )
@@ -108,6 +109,9 @@ def init_db() -> None:
         if "profile_path" not in columns:
             connection.execute("ALTER TABLE accounts ADD COLUMN profile_path TEXT")
             connection.commit()
+        if "password" not in columns:
+            connection.execute("ALTER TABLE accounts ADD COLUMN password TEXT")
+            connection.commit()
 
         rows = connection.execute(
             "SELECT id, age_days, created_at, profile_path FROM accounts"
@@ -135,77 +139,6 @@ def init_db() -> None:
                     ),
                 )
         connection.commit()
-
-        seed_demo_data = os.getenv("SEED_DEMO_DATA", "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-
-        if seed_demo_data:
-            account_count = connection.execute(
-                "SELECT COUNT(*) AS count FROM accounts"
-            ).fetchone()["count"]
-            if account_count == 0:
-                now = datetime.datetime.now()
-                connection.executemany(
-                    """
-                    INSERT INTO accounts
-                        (name, email, age_days, proxy, ios_profile, profile_path, notes, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-                    """,
-                    [
-                        (
-                            "Account A",
-                            "account-a@firma.de",
-                            320,
-                            "http://user:pass@proxy-a:8080",
-                            "iPhone 13",
-                            build_profile_path(1),
-                            "Hauptaccount",
-                            (now - datetime.timedelta(days=320)).isoformat(timespec="minutes"),
-                        ),
-                        (
-                            "Account B",
-                            "account-b@firma.de",
-                            180,
-                            "http://user:pass@proxy-b:8080",
-                            "iPhone 12",
-                            build_profile_path(2),
-                            "Ersatzaccount",
-                            (now - datetime.timedelta(days=180)).isoformat(timespec="minutes"),
-                        ),
-                    ],
-                )
-
-            message_count = connection.execute(
-                "SELECT COUNT(*) AS count FROM messages"
-            ).fetchone()["count"]
-            if message_count == 0:
-                now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                connection.executemany(
-                    """
-                    INSERT INTO messages
-                        (account_id, listing_title, sender, text, timestamp)
-                    VALUES (?, ?, ?, ?, ?);
-                    """,
-                    [
-                        (
-                            1,
-                            "iPhone 13 Pro 128GB",
-                            "Kunde",
-                            "Ist das Gerät noch verfügbar?",
-                            now,
-                        ),
-                        (
-                            2,
-                            "MacBook Air M1",
-                            "Kunde",
-                            "Ist der Preis verhandelbar?",
-                            now,
-                        ),
-                    ],
-                )
 
         connection.commit()
 
@@ -376,23 +309,25 @@ def post_message():
 @app.post("/api/login")
 def login_account():
     payload = request.get_json(force=True)
+    email = (payload.get("email") or "").strip()
+    password = (payload.get("password") or "").strip()
     proxy = (payload.get("proxy") or "").strip()
-    ios_profile = (payload.get("ios_profile") or "").strip()
-    label = (payload.get("label") or "").strip()
 
-    if not proxy or not ios_profile:
-        return jsonify({"error": "Proxy und iOS-Profil sind erforderlich."}), 400
+    if not email or not password:
+        return jsonify({"error": "E-Mail und Passwort sind erforderlich."}), 400
 
     created_at = datetime.datetime.now().isoformat(timespec="minutes")
-    account_name = label or "Neuer Account"
+    account_name = email.split("@")[0] if "@" in email else email
+    ios_profile = "iPhone 13"
 
     with get_connection() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO accounts (name, email, age_days, proxy, ios_profile, profile_path, notes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO accounts
+                (name, email, age_days, proxy, ios_profile, profile_path, notes, created_at, password)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (account_name, "", 0, proxy, ios_profile, "", label, created_at),
+            (account_name, email, 0, proxy, ios_profile, "", "", created_at, password),
         )
         account_id = cursor.lastrowid
         profile_path = build_profile_path(account_id)
