@@ -49,6 +49,7 @@ const startLoginPolling = (jobId) => {
       return;
     }
     const job = await response.json();
+
     if (job.status === "waiting_for_user") {
       setLoginStatus("Login-Fenster geöffnet. Bitte im iOS-Fenster einloggen.");
       return;
@@ -73,6 +74,13 @@ const startLoginPolling = (jobId) => {
       updateLoginButtonState(false);
       return;
     }
+    if (job.status === "error") {
+      setLoginStatus("Login-Prüfung fehlgeschlagen. Bitte erneut versuchen.");
+      stopLoginPolling();
+      updateLoginButtonState(false);
+      return;
+    }
+
     setLoginStatus("Login wurde beendet.");
     stopLoginPolling();
     updateLoginButtonState(false);

@@ -286,6 +286,7 @@ def update_login_job(
 def check_login_valid(job: LoginJob) -> bool:
     profile_path = Path(job.profile_path)
     profile_path.mkdir(parents=True, exist_ok=True)
+
     with sync_playwright() as playwright:
         device = dict(
             playwright.devices.get(job.ios_profile) or playwright.devices["iPhone 13"]
@@ -299,10 +300,24 @@ def check_login_valid(job: LoginJob) -> bool:
             headless=True,
             **device,
         )
+
+        # In der Check-Phase lieber *nicht* unendlich warten:
+        context.set_default_timeout(30000)
+
         page = context.new_page()
-        page.goto(LOGIN_URL, wait_until="domcontentloaded")
+        page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+
         current_url = page.url
-        is_logged_in = current_url != LOGIN_URL and "anmeldung" not in current_url
+
+        # Robust: wenn Login-Form sichtbar ist → nicht eingeloggt
+        login_form_present = bool(
+            page.query_selector("#login-email")
+            or page.query_selector("#login-password")
+            or page.query_selector("#login-submit")
+        )
+
+        is_logged_in = (not login_form_present) and ("anmeldung" not in current_url)
+
         if not is_logged_in:
             storage = context.storage_state()
             cookie_names = {
@@ -314,7 +329,9 @@ def check_login_valid(job: LoginJob) -> bool:
                 for name in cookie_names
                 for token in ("session", "sid", "auth", "token")
             )
+
         context.close()
+
     return bool(is_logged_in)
 
 
@@ -344,6 +361,8 @@ def login_with_playwright(job_id: int) -> None:
                 headless=False,
                 **device,
             )
+
+            # Für den manuellen Login: unendliche Timeouts ok
             context.set_default_timeout(0)
 
             page = context.new_page()
@@ -351,19 +370,32 @@ def login_with_playwright(job_id: int) -> None:
             if "registrierung" in page.url or "registrieren" in page.url:
                 page.goto(LOGIN_URL, wait_until="domcontentloaded")
 
-            # Markiere: wartet auf den User (Login im offenen Browser-Fenster)
             update_login_job(job.id, "waiting_for_user")
 
-            # Blockiert bis Fenster/Context geschlossen wird (durch set_default_timeout(0) ohne Timeout)
-            context.wait_for_event("close")
+            # Warten bis der User das Fenster schließt (timeout=0 = kein Timeout)
+            context.wait_for_event("close", timeout=0)
+
     finally:
         update_login_job(
             job.id,
             "checking",
             datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
-        is_valid = check_login_valid(job)
+
+        try:
+            is_valid = check_login_valid(job)
+        except Exception:
+            checked_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+            update_login_job(
+                job.id,
+                "error",
+                finished_at=checked_at,
+                checked_at=checked_at,
+            )
+            return
+
         checked_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+
         if is_valid:
             created_at = datetime.datetime.now().isoformat(timespec="minutes")
             account_name = job.email.split("@")[0] if "@" in job.email else job.email
@@ -388,6 +420,7 @@ def login_with_playwright(job_id: int) -> None:
                 )
                 account_id = int(cursor.lastrowid)
                 connection.commit()
+
             update_login_job(
                 job.id,
                 "valid",
