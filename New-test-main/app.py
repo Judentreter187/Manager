@@ -344,13 +344,17 @@ def login_with_playwright(job_id: int) -> None:
                 headless=False,
                 **device,
             )
+            context.set_default_timeout(0)
+
             page = context.new_page()
             page.goto(LOGIN_URL, wait_until="domcontentloaded")
+            if "registrierung" in page.url or "registrieren" in page.url:
+                page.goto(LOGIN_URL, wait_until="domcontentloaded")
 
             # Markiere: wartet auf den User (Login im offenen Browser-Fenster)
             update_login_job(job.id, "waiting_for_user")
 
-            # Blockiert bis Fenster/Context geschlossen wird
+            # Blockiert bis Fenster/Context geschlossen wird (durch set_default_timeout(0) ohne Timeout)
             context.wait_for_event("close")
     finally:
         update_login_job(
