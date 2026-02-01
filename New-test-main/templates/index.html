@@ -27,7 +27,7 @@
 
         <div class="card login-card">
           <div>
-            <h3>iOS Login starten</h3>
+            <h3>Login starten</h3>
             <p>
               Öffnet eine echte Safari-iOS-Session mit festem Proxy und persistentem Profil.
               Ziel:
@@ -36,7 +36,7 @@
             <p class="muted" id="login-status">Bereit für den Login.</p>
           </div>
           <div class="login-actions">
-            <button id="login-button" class="primary">Login starten</button>
+            <button id="open-login-modal" class="primary">Login starten</button>
           </div>
         </div>
 
@@ -52,20 +52,15 @@
                 <dd>{{ account.age_days }} Tage</dd>
                 <dt>Proxy</dt>
                 <dd>{{ account.proxy }}</dd>
-                <dt>iOS-Profil</dt>
-                <dd>{{ account.ios_profile }}</dd>
-                <dt>Notizen</dt>
-                <dd>{{ account.notes }}</dd>
               </dl>
-              <div class="actions">
-                <button>Proxy testen</button>
-                <button class="secondary">Profil öffnen</button>
-              </div>
             </article>
             {% endfor %}
           </div>
         {% else %}
-          <p class="muted">Noch keine Accounts, bitte einloggen.</p>
+          <div class="card empty-state">
+            <h3>Noch keine Accounts</h3>
+            <p class="muted">Starte einen Login, um einen neuen Account zu speichern.</p>
+          </div>
         {% endif %}
       </section>
 
@@ -194,26 +189,31 @@
     <div class="modal hidden" id="login-modal" aria-hidden="true">
       <div class="modal-backdrop" data-close-modal></div>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
-        <h3 id="login-modal-title">Login starten</h3>
-        <p class="muted">Bitte Proxy und iOS-Profil angeben, bevor die iOS-Session geöffnet wird.</p>
+        <h3 id="login-modal-title">Account Login</h3>
+        <p class="muted">
+          Bitte E-Mail, Passwort und optional einen Proxy angeben, bevor die iOS-Session geöffnet wird.
+        </p>
         <form id="login-modal-form">
           <label>
-            Proxy
-            <input type="text" name="proxy" placeholder="http://user:pass@proxy:8080" required />
+            E-Mail
+            <input type="email" name="email" required />
           </label>
           <label>
-            iOS-Geräteprofil
-            <input type="text" name="ios_profile" placeholder="z. B. iPhone 13" required />
+            Passwort
+            <input type="password" name="password" required />
           </label>
           <label>
-            Label (optional)
-            <input type="text" name="label" placeholder="z. B. Sommer-Account" />
+            Proxy (optional)
+            <input type="text" name="proxy" placeholder="http://user:pass@proxy:8080" />
           </label>
           <div class="actions modal-actions">
             <button type="button" class="secondary" data-close-modal>Abbrechen</button>
             <button type="submit">Login starten</button>
           </div>
         </form>
+        <p class="helper">
+          Login öffnet den Kleinanzeigen In-App Link in einem iOS-Safari-Profil.
+        </p>
       </div>
     </div>
 

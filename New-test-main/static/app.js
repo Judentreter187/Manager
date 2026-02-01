@@ -1,4 +1,4 @@
-const loginButton = document.getElementById("login-button");
+const loginButton = document.getElementById("open-login-modal");
 const loginModal = document.getElementById("login-modal");
 const loginForm = document.getElementById("login-modal-form");
 const loginStatus = document.getElementById("login-status");
@@ -41,10 +41,10 @@ const stopLoginPolling = () => {
   }
 };
 
-const startLoginPolling = (accountId) => {
+const startLoginPolling = (jobId) => {
   stopLoginPolling();
   loginPoller = window.setInterval(async () => {
-    const response = await fetch(`/api/login-jobs/${accountId}`);
+    const response = await fetch(`/api/login-jobs/${jobId}`);
     if (!response.ok) {
       return;
     }
@@ -57,10 +57,26 @@ const startLoginPolling = (accountId) => {
       setLoginStatus("Login wird vorbereitet…");
       return;
     }
-    if (job.status === "completed") {
-      setLoginStatus("Login abgeschlossen. Account wird geladen…");
+    if (job.status === "checking") {
+      setLoginStatus("Login wird geprüft…");
+      return;
+    }
+    if (job.status === "valid") {
+      setLoginStatus("Login gültig. Account wird geladen…");
       stopLoginPolling();
       window.setTimeout(() => window.location.reload(), 800);
+      return;
+    }
+    if (job.status === "invalid") {
+      setLoginStatus("Login ungültig. Bitte erneut versuchen.");
+      stopLoginPolling();
+      updateLoginButtonState(false);
+      return;
+    }
+    if (job.status === "error") {
+      setLoginStatus("Login-Prüfung fehlgeschlagen. Bitte erneut versuchen.");
+      stopLoginPolling();
+      updateLoginButtonState(false);
       return;
     }
     setLoginStatus("Login wurde beendet.");
@@ -84,9 +100,9 @@ if (loginForm) {
     event.preventDefault();
     const formData = new FormData(loginForm);
     const payload = {
+      email: formData.get("email"),
+      password: formData.get("password"),
       proxy: formData.get("proxy"),
-      ios_profile: formData.get("ios_profile"),
-      label: formData.get("label"),
     };
 
     updateLoginButtonState(true);
@@ -107,6 +123,6 @@ if (loginForm) {
 
     const data = await response.json();
     setLoginStatus("Login wird vorbereitet…");
-    startLoginPolling(data.account_id);
+    startLoginPolling(data.job_id);
   });
 }
