@@ -41,10 +41,10 @@ const stopLoginPolling = () => {
   }
 };
 
-const startLoginPolling = (accountId) => {
+const startLoginPolling = (jobId) => {
   stopLoginPolling();
   loginPoller = window.setInterval(async () => {
-    const response = await fetch(`/api/login-jobs/${accountId}`);
+    const response = await fetch(`/api/login-jobs/${jobId}`);
     if (!response.ok) {
       return;
     }
@@ -57,10 +57,20 @@ const startLoginPolling = (accountId) => {
       setLoginStatus("Login wird vorbereitet…");
       return;
     }
-    if (job.status === "completed") {
-      setLoginStatus("Login abgeschlossen. Account wird geladen…");
+    if (job.status === "checking") {
+      setLoginStatus("Login wird geprüft…");
+      return;
+    }
+    if (job.status === "valid") {
+      setLoginStatus("Login gültig. Account wird geladen…");
       stopLoginPolling();
       window.setTimeout(() => window.location.reload(), 800);
+      return;
+    }
+    if (job.status === "invalid") {
+      setLoginStatus("Login ungültig. Bitte erneut versuchen.");
+      stopLoginPolling();
+      updateLoginButtonState(false);
       return;
     }
     setLoginStatus("Login wurde beendet.");
@@ -107,6 +117,6 @@ if (loginForm) {
 
     const data = await response.json();
     setLoginStatus("Login wird vorbereitet…");
-    startLoginPolling(data.account_id);
+    startLoginPolling(data.job_id);
   });
 }
