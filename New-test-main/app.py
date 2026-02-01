@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -89,64 +90,71 @@ def init_db() -> None:
             """
         )
 
-        account_count = connection.execute(
-            "SELECT COUNT(*) AS count FROM accounts"
-        ).fetchone()["count"]
-        if account_count == 0:
-            connection.executemany(
-                """
-                INSERT INTO accounts
-                    (name, email, age_days, proxy, ios_profile, notes)
-                VALUES (?, ?, ?, ?, ?, ?);
-                """,
-                [
-                    (
-                        "Account A",
-                        "account-a@firma.de",
-                        320,
-                        "http://user:pass@proxy-a:8080",
-                        "iPhone 13",
-                        "Hauptaccount",
-                    ),
-                    (
-                        "Account B",
-                        "account-b@firma.de",
-                        180,
-                        "http://user:pass@proxy-b:8080",
-                        "iPhone 12",
-                        "Ersatzaccount",
-                    ),
-                ],
-            )
+        seed_demo_data = os.getenv("SEED_DEMO_DATA", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }
 
-        message_count = connection.execute(
-            "SELECT COUNT(*) AS count FROM messages"
-        ).fetchone()["count"]
-        if message_count == 0:
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            connection.executemany(
-                """
-                INSERT INTO messages
-                    (account_id, listing_title, sender, text, timestamp)
-                VALUES (?, ?, ?, ?, ?);
-                """,
-                [
-                    (
-                        1,
-                        "iPhone 13 Pro 128GB",
-                        "Kunde",
-                        "Ist das Gerät noch verfügbar?",
-                        now,
-                    ),
-                    (
-                        2,
-                        "MacBook Air M1",
-                        "Kunde",
-                        "Ist der Preis verhandelbar?",
-                        now,
-                    ),
-                ],
-            )
+        if seed_demo_data:
+            account_count = connection.execute(
+                "SELECT COUNT(*) AS count FROM accounts"
+            ).fetchone()["count"]
+            if account_count == 0:
+                connection.executemany(
+                    """
+                    INSERT INTO accounts
+                        (name, email, age_days, proxy, ios_profile, notes)
+                    VALUES (?, ?, ?, ?, ?, ?);
+                    """,
+                    [
+                        (
+                            "Account A",
+                            "account-a@firma.de",
+                            320,
+                            "http://user:pass@proxy-a:8080",
+                            "iPhone 13",
+                            "Hauptaccount",
+                        ),
+                        (
+                            "Account B",
+                            "account-b@firma.de",
+                            180,
+                            "http://user:pass@proxy-b:8080",
+                            "iPhone 12",
+                            "Ersatzaccount",
+                        ),
+                    ],
+                )
+
+            message_count = connection.execute(
+                "SELECT COUNT(*) AS count FROM messages"
+            ).fetchone()["count"]
+            if message_count == 0:
+                now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                connection.executemany(
+                    """
+                    INSERT INTO messages
+                        (account_id, listing_title, sender, text, timestamp)
+                    VALUES (?, ?, ?, ?, ?);
+                    """,
+                    [
+                        (
+                            1,
+                            "iPhone 13 Pro 128GB",
+                            "Kunde",
+                            "Ist das Gerät noch verfügbar?",
+                            now,
+                        ),
+                        (
+                            2,
+                            "MacBook Air M1",
+                            "Kunde",
+                            "Ist der Preis verhandelbar?",
+                            now,
+                        ),
+                    ],
+                )
 
         connection.commit()
 

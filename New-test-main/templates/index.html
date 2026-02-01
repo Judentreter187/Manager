@@ -36,38 +36,46 @@
           </div>
           <div class="login-actions">
             <select id="login-account">
+              {% if accounts %}
               {% for account in accounts %}
               <option value="{{ account.id }}">{{ account.name }} ({{ account.ios_profile }})</option>
               {% endfor %}
+              {% else %}
+              <option value="">Keine Accounts vorhanden</option>
+              {% endif %}
             </select>
-            <button id="login-button">Login starten</button>
+            <button id="login-button" {% if not accounts %}disabled{% endif %}>Login starten</button>
           </div>
         </div>
 
-        <div class="card-grid">
-          {% for account in accounts %}
-          <article class="card">
-            <h3>{{ account.name }}</h3>
-            <dl>
-              <dt>E-Mail</dt>
-              <dd>{{ account.email }}</dd>
-              <dt>Account-Alter</dt>
-              <dd>{{ account.age_days }} Tage</dd>
-              <dt>Proxy</dt>
-              <dd>{{ account.proxy }}</dd>
-              <dt>iOS-Profil</dt>
-              <dd>{{ account.ios_profile }}</dd>
-              <dt>Notizen</dt>
-              <dd>{{ account.notes }}</dd>
-            </dl>
-            <div class="actions">
-              <button class="secondary">Login starten (Playwright)</button>
-              <button>Proxy testen</button>
-              <button class="secondary">Profil öffnen</button>
-            </div>
-          </article>
-          {% endfor %}
-        </div>
+        {% if accounts %}
+          <div class="card-grid">
+            {% for account in accounts %}
+            <article class="card">
+              <h3>{{ account.name }}</h3>
+              <dl>
+                <dt>E-Mail</dt>
+                <dd>{{ account.email }}</dd>
+                <dt>Account-Alter</dt>
+                <dd>{{ account.age_days }} Tage</dd>
+                <dt>Proxy</dt>
+                <dd>{{ account.proxy }}</dd>
+                <dt>iOS-Profil</dt>
+                <dd>{{ account.ios_profile }}</dd>
+                <dt>Notizen</dt>
+                <dd>{{ account.notes }}</dd>
+              </dl>
+              <div class="actions">
+                <button class="secondary">Login starten (Playwright)</button>
+                <button>Proxy testen</button>
+                <button class="secondary">Profil öffnen</button>
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="muted">Noch keine Accounts, bitte einloggen.</p>
+        {% endif %}
       </section>
 
       <section id="messages" class="tab">
@@ -77,6 +85,7 @@
         </p>
         <div class="split">
           <div class="chat-list" id="chat-list">
+            {% if messages %}
             {% for message in messages %}
             <div class="chat-item" data-account="{{ message.account_id }}">
               <strong>{{ message.listing_title }}</strong>
@@ -84,6 +93,9 @@
               <p>{{ message.text }}</p>
             </div>
             {% endfor %}
+            {% else %}
+            <p class="muted">Noch keine Nachrichten vorhanden.</p>
+            {% endif %}
           </div>
           <div class="chat-panel">
             <div class="chat-header">
@@ -91,22 +103,30 @@
               <span class="badge">iOS-Chat</span>
             </div>
             <div class="chat-window" id="chat-window">
+              {% if messages %}
               {% for message in messages %}
               <div class="bubble {{ 'out' if message.sender == 'Firma' else 'in' }}">
                 <p>{{ message.text }}</p>
                 <span>{{ message.timestamp }} · {{ message.sender }}</span>
               </div>
               {% endfor %}
+              {% else %}
+              <p class="muted">Keine Unterhaltung ausgewählt.</p>
+              {% endif %}
             </div>
             <form id="message-form" class="chat-input">
               <select name="account_id" aria-label="Account">
+                {% if accounts %}
                 {% for account in accounts %}
                 <option value="{{ account.id }}">{{ account.name }}</option>
                 {% endfor %}
+                {% else %}
+                <option value="">Keine Accounts vorhanden</option>
+                {% endif %}
               </select>
               <input type="text" name="listing_title" placeholder="Inserat-Titel" required />
               <input type="text" name="text" placeholder="Nachricht schreiben…" required />
-              <button type="submit">Senden</button>
+              <button type="submit" {% if not accounts %}disabled{% endif %}>Senden</button>
             </form>
             <p class="helper">
               Versand erfolgt über die iOS-Emulation des gewählten Accounts (Human-in-the-loop).
@@ -121,9 +141,13 @@
           <label>
             Account
             <select>
+              {% if accounts %}
               {% for account in accounts %}
               <option value="{{ account.id }}">{{ account.name }}</option>
               {% endfor %}
+              {% else %}
+              <option value="">Keine Accounts vorhanden</option>
+              {% endif %}
             </select>
           </label>
           <label>
