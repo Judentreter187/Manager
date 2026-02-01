@@ -32,6 +32,7 @@ class Account:
     proxy: str
     ios_profile: str
     notes: str = ""
+    created_at: Optional[str] = None
 
 
 @dataclass
@@ -62,7 +63,8 @@ def init_db() -> None:
                 age_days INTEGER NOT NULL,
                 proxy TEXT NOT NULL,
                 ios_profile TEXT NOT NULL,
-                notes TEXT
+                notes TEXT,
+                created_at TEXT
             );
             """
         )
@@ -90,6 +92,14 @@ def init_db() -> None:
             """
         )
 
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(accounts)").fetchall()
+        }
+        if "created_at" not in columns:
+            connection.execute("ALTER TABLE accounts ADD COLUMN created_at TEXT")
+            connection.commit()
+
         seed_demo_data = os.getenv("SEED_DEMO_DATA", "").strip().lower() in {
             "1",
             "true",
@@ -101,11 +111,12 @@ def init_db() -> None:
                 "SELECT COUNT(*) AS count FROM accounts"
             ).fetchone()["count"]
             if account_count == 0:
+                now = datetime.datetime.now()
                 connection.executemany(
                     """
                     INSERT INTO accounts
-                        (name, email, age_days, proxy, ios_profile, notes)
-                    VALUES (?, ?, ?, ?, ?, ?);
+                        (name, email, age_days, proxy, ios_profile, notes, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?);
                     """,
                     [
                         (
@@ -115,6 +126,7 @@ def init_db() -> None:
                             "http://user:pass@proxy-a:8080",
                             "iPhone 13",
                             "Hauptaccount",
+                            (now - datetime.timedelta(days=320)).strftime("%Y-%m-%d %H:%M"),
                         ),
                         (
                             "Account B",
@@ -123,6 +135,7 @@ def init_db() -> None:
                             "http://user:pass@proxy-b:8080",
                             "iPhone 12",
                             "Ersatzaccount",
+                            (now - datetime.timedelta(days=180)).strftime("%Y-%m-%d %H:%M"),
                         ),
                     ],
                 )
@@ -159,10 +172,22 @@ def init_db() -> None:
         connection.commit()
 
 
+def row_to_account(row: sqlite3.Row) -> Account:
+    data = dict(row)
+    created_at = data.get("created_at")
+    if created_at:
+        try:
+            created = datetime.datetime.strptime(created_at, "%Y-%m-%d %H:%M")
+            data["age_days"] = max((datetime.datetime.now() - created).days, 0)
+        except ValueError:
+            pass
+    return Account(**data)
+
+
 def fetch_accounts() -> List[Account]:
     with get_connection() as connection:
         rows = connection.execute("SELECT * FROM accounts ORDER BY id").fetchall()
-    return [Account(**dict(row)) for row in rows]
+    return [row_to_account(row) for row in rows]
 
 
 def fetch_messages() -> List[Message]:
@@ -191,7 +216,12 @@ def record_login_job(account_id: int, status: str, finished_at: Optional[str] = 
                 """
                 UPDATE login_jobs
                 SET status = ?, finished_at = ?
-                WHERE account_id = ? AND status = 'running'
+                WHERE id = (
+                    SELECT id FROM login_jobs
+                    WHERE account_id = ?
+                    ORDER BY id DESC
+                    LIMIT 1
+                )
                 """,
                 (status, finished_at, account_id),
             )
@@ -208,29 +238,33 @@ def login_with_playwright(account: Account) -> None:
     profile_path = PROFILE_DIR / f"account_{account.id}"
     profile_path.mkdir(parents=True, exist_ok=True)
 
-    with sync_playwright() as playwright:
-        device = playwright.devices.get(account.ios_profile) or playwright.devices["iPhone 13"]
+    try:
+        with sync_playwright() as playwright:
+            device = playwright.devices.get(account.ios_profile) or playwright.devices["iPhone 13"]
 
-        context = playwright.webkit.launch_persistent_context(
-            user_data_dir=str(profile_path),
-            proxy={"server": account.proxy} if account.proxy else None,
-            locale="de-DE",
-            headless=False,
-            **device,
-        )
-        page = context.new_page()
-        page.goto(LOGIN_URL, wait_until="domcontentloaded")
+            context = playwright.webkit.launch_persistent_context(
+                user_data_dir=str(profile_path),
+                proxy={"server": account.proxy} if account.proxy else None,
+                locale="de-DE",
+                headless=False,
+                **device,
+            )
+            page = context.new_page()
+            page.goto(LOGIN_URL, wait_until="domcontentloaded")
 
-        # Markiere: wartet auf den User (Login im offenen Browser-Fenster)
+            # Markiere: wartet auf den User (Login im offenen Browser-Fenster)
+            record_login_job(
+                account.id,
+                "waiting_for_user",
+            )
+
+            context.wait_for_event("close")
+    finally:
         record_login_job(
             account.id,
-            "waiting_for_user",
+            "completed",
             datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
         )
-
-        # Wichtig: nicht sofort schließen -> Human-in-the-loop.
-        # Wenn du irgendwann auto-close willst, kannst du hier mit wait_for_timeout arbeiten.
-        # context.close()
 
 
 def start_login_thread(account: Account) -> None:
@@ -286,17 +320,52 @@ def post_message():
 @app.post("/api/login")
 def login_account():
     payload = request.get_json(force=True)
-    account_id = int(payload["account_id"])
+    proxy = (payload.get("proxy") or "").strip()
+    ios_profile = (payload.get("ios_profile") or "").strip()
+    label = (payload.get("label") or "").strip()
+
+    if not proxy or not ios_profile:
+        return jsonify({"error": "Proxy und iOS-Profil sind erforderlich."}), 400
+
+    created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    account_name = label or "Neuer Account"
 
     with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO accounts (name, email, age_days, proxy, ios_profile, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (account_name, "", 0, proxy, ios_profile, label, created_at),
+        )
+        account_id = cursor.lastrowid
+        connection.commit()
+
         row = connection.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
 
-    if row is None:
-        return jsonify({"error": "Account nicht gefunden"}), 404
-
-    account = Account(**dict(row))
+    account = row_to_account(row)
     start_login_thread(account)
-    return jsonify({"status": "started", "login_url": LOGIN_URL})
+    return jsonify({"status": "started", "account_id": account.id})
+
+
+@app.get("/api/login-jobs/<int:account_id>")
+def get_login_job(account_id: int):
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT status, started_at, finished_at
+            FROM login_jobs
+            WHERE account_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (account_id,),
+        ).fetchone()
+
+    if row is None:
+        return jsonify({"error": "Kein Login-Job gefunden."}), 404
+
+    return jsonify(dict(row))
 
 
 init_db()
