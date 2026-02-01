@@ -287,7 +287,11 @@ def check_login_valid(job: LoginJob) -> bool:
     profile_path = Path(job.profile_path)
     profile_path.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
-        device = playwright.devices.get(job.ios_profile) or playwright.devices["iPhone 13"]
+        device = dict(
+            playwright.devices.get(job.ios_profile) or playwright.devices["iPhone 13"]
+        )
+        device.pop("default_browser_type", None)
+
         context = playwright.webkit.launch_persistent_context(
             user_data_dir=str(profile_path),
             proxy={"server": job.proxy} if job.proxy else None,
@@ -328,7 +332,10 @@ def login_with_playwright(job_id: int) -> None:
 
     try:
         with sync_playwright() as playwright:
-            device = playwright.devices.get(job.ios_profile) or playwright.devices["iPhone 13"]
+            device = dict(
+                playwright.devices.get(job.ios_profile) or playwright.devices["iPhone 13"]
+            )
+            device.pop("default_browser_type", None)
 
             context = playwright.webkit.launch_persistent_context(
                 user_data_dir=str(profile_path),
