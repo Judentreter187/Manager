@@ -64,6 +64,10 @@ main {
   box-shadow: 0 8px 20px rgba(37, 59, 91, 0.08);
 }
 
+.empty-state {
+  text-align: center;
+}
+
 .login-card {
   margin-bottom: 20px;
   display: flex;
