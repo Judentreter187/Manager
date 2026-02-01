@@ -122,20 +122,19 @@ def init_db() -> None:
             """
         )
 
-        columns = {
+        # --- migrate accounts table if older DB exists ---
+        account_columns = {
             row["name"]
             for row in connection.execute("PRAGMA table_info(accounts)").fetchall()
         }
-        if "created_at" not in columns:
+        if "created_at" not in account_columns:
             connection.execute("ALTER TABLE accounts ADD COLUMN created_at TEXT")
-            connection.commit()
-        if "profile_path" not in columns:
+        if "profile_path" not in account_columns:
             connection.execute("ALTER TABLE accounts ADD COLUMN profile_path TEXT")
-            connection.commit()
-        if "password" not in columns:
+        if "password" not in account_columns:
             connection.execute("ALTER TABLE accounts ADD COLUMN password TEXT")
-            connection.commit()
 
+        # --- migrate login_jobs table if older DB exists ---
         login_columns = {
             row["name"]
             for row in connection.execute("PRAGMA table_info(login_jobs)").fetchall()
@@ -153,8 +152,8 @@ def init_db() -> None:
                 connection.execute(
                     f"ALTER TABLE login_jobs ADD COLUMN {column_name} {sql_type}"
                 )
-                connection.commit()
 
+        # --- backfill derived columns for accounts ---
         rows = connection.execute(
             "SELECT id, age_days, created_at, profile_path FROM accounts"
         ).fetchall()
@@ -180,7 +179,6 @@ def init_db() -> None:
                         row["id"],
                     ),
                 )
-        connection.commit()
 
         connection.commit()
 
@@ -218,7 +216,9 @@ def create_login_job(email: str, password: str, proxy: str) -> int:
 
 def fetch_login_job(job_id: int) -> Optional[LoginJob]:
     with get_connection() as connection:
-        row = connection.execute("SELECT * FROM login_jobs WHERE id = ?", (job_id,)).fetchone()
+        row = connection.execute(
+            "SELECT * FROM login_jobs WHERE id = ?", (job_id,)
+        ).fetchone()
     if row is None:
         return None
     return LoginJob(**dict(row))
@@ -301,7 +301,10 @@ def check_login_valid(job: LoginJob) -> bool:
         is_logged_in = current_url != LOGIN_URL and "anmeldung" not in current_url
         if not is_logged_in:
             storage = context.storage_state()
-            cookie_names = {cookie.get("name", "").lower() for cookie in storage.get("cookies", [])}
+            cookie_names = {
+                cookie.get("name", "").lower()
+                for cookie in storage.get("cookies", [])
+            }
             is_logged_in = any(
                 token in name
                 for name in cookie_names
@@ -340,6 +343,7 @@ def login_with_playwright(job_id: int) -> None:
             # Markiere: wartet auf den User (Login im offenen Browser-Fenster)
             update_login_job(job.id, "waiting_for_user")
 
+            # Blockiert bis Fenster/Context geschlossen wird
             context.wait_for_event("close")
     finally:
         update_login_job(
